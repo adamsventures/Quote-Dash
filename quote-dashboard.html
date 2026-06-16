@@ -427,11 +427,14 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
 }`;
 
   try {
-    log('Fetching emails and PDFs from Gmail…');
+    const latestDate = quotes.length ? quotes.reduce((max, q) => q.date > max ? q.date : max, '') : null;
+    if (latestDate) log('Incremental sync — fetching emails after ' + latestDate);
+    else log('Full sync — fetching up to 20 most recent emails…');
+
     const resp = await fetch('/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, since: latestDate })
     });
 
     if (!resp.ok) {

@@ -42,10 +42,12 @@ export async function onRequestPost(context) {
     }
     const accessToken = tokenData.access_token;
 
-    const { prompt } = await request.json();
+    const { prompt, since } = await request.json();
 
     // Search Gmail for matching emails (most recent first, up to 20)
-    const query = 'from:ahb@kgssteel.com subject:"Daily Quotes for Whs 1"';
+    // If `since` date is provided, only fetch emails after that date
+    let query = 'from:ahb@kgssteel.com subject:"Daily Quotes for Whs 1"';
+    if (since) query += ` after:${since.replace(/-/g, '/')}`;
     const listResp = await fetch(
       `https://www.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=20`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
