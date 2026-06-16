@@ -42,9 +42,6 @@
   button.primary { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-text); font-weight: 500; }
   button.primary:hover { filter: brightness(0.95); }
   button.danger-btn { background: var(--danger-bg); border-color: var(--danger); color: var(--danger-text); }
-  .key-banner { background: var(--warn-bg); border: 0.5px solid var(--warn); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text); }
-  .key-banner input { flex: 1; min-width: 220px; background: var(--bg); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 7px 11px; font-size: 13px; font-family: 'SF Mono','Fira Mono',monospace; color: var(--text); outline: none; }
-  .key-banner input:focus { border-color: var(--accent); }
   .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 24px; }
   .metric { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
   .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -104,17 +101,14 @@
       <div class="subtitle">Warehouse 1 &nbsp;·&nbsp; <span id="sync-status">Never synced</span></div>
     </div>
     <div class="actions">
+      <div style="display:flex;gap:4px;background:var(--bg3);border-radius:var(--radius-sm);padding:3px;">
+        <button class="tab active" id="rep-all" onclick="setRep('ALL')" style="padding:6px 14px;font-size:12px;">All</button>
+        <button class="tab" id="rep-BH" onclick="setRep('BH')" style="padding:6px 14px;font-size:12px;">BH</button>
+        <button class="tab" id="rep-JA" onclick="setRep('JA')" style="padding:6px 14px;font-size:12px;">JA</button>
+      </div>
       <button class="danger-btn" onclick="clearData()" id="clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear data</button>
       <button class="primary" onclick="startSync()" id="sync-btn"><i class="ti ti-refresh" id="sync-icon" aria-hidden="true"></i> <span id="sync-label">Sync Gmail</span></button>
     </div>
-  </div>
-
-  <div class="key-banner" id="key-banner" style="display:none">
-    <i class="ti ti-key" style="color:var(--warn);flex-shrink:0"></i>
-    <span style="flex-shrink:0">Anthropic API key:</span>
-    <input type="password" id="key-input" placeholder="sk-ant-api03-…" autocomplete="off" />
-    <button onclick="saveKey()"><i class="ti ti-check"></i> Save</button>
-    <button onclick="clearKey()" class="danger-btn"><i class="ti ti-x"></i> Clear</button>
   </div>
 
   <div class="metrics">
@@ -183,8 +177,6 @@
 </div>
 
 <script>
-const API_KEY_STORE = 'whs1_api_key';
-let API_KEY = localStorage.getItem(API_KEY_STORE) || '';
 const SENDER = 'ahb@kgssteel.com';
 const SUBJECT = 'Daily Quotes for Whs 1';
 const STORE_KEY = 'whs1_quotes_v2';
@@ -195,34 +187,28 @@ let quotes = [];
 let syncLog = [];
 let custChart = null;
 let syncing = false;
+let activeRep = 'ALL';
 
-function updateKeyBanner() {
-  const banner = document.getElementById('key-banner');
-  const input = document.getElementById('key-input');
-  banner.style.display = API_KEY ? 'none' : 'flex';
-  if (!API_KEY) input.value = '';
+function setRep(rep) {
+  activeRep = rep;
+  ['ALL','BH','JA'].forEach(r => {
+    const id = r === 'ALL' ? 'rep-all' : 'rep-' + r;
+    document.getElementById(id).classList.toggle('active', r === rep);
+  });
+  renderAll();
 }
 
-function saveKey() {
-  const val = document.getElementById('key-input').value.trim();
-  if (!val.startsWith('sk-ant-')) { alert('That doesn\'t look like an Anthropic API key (should start with sk-ant-).'); return; }
-  API_KEY = val;
-  localStorage.setItem(API_KEY_STORE, API_KEY);
-  updateKeyBanner();
+function filteredQuotes() {
+  if (activeRep === 'ALL') return quotes;
+  return quotes.filter(q => q.arTerr === activeRep);
 }
 
-function clearKey() {
-  API_KEY = '';
-  localStorage.removeItem(API_KEY_STORE);
-  updateKeyBanner();
-}
 
 function load() {
   try { quotes = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { quotes = []; }
   try { syncLog = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch(e) { syncLog = []; }
   const ls = localStorage.getItem(SYNC_KEY);
   document.getElementById('sync-status').textContent = ls ? 'Last synced ' + ls : 'Never synced';
-  updateKeyBanner();
   renderAll();
 }
 
@@ -255,7 +241,7 @@ function fmtFull(n) {
 
 function buildMap() {
   const m = {};
-  quotes.forEach(q => {
+  filteredQuotes().forEach(q => {
     if (!m[q.customer]) m[q.customer] = {count:0, total:0};
     m[q.customer].count++;
     m[q.customer].total += q.amount || 0;
@@ -264,13 +250,14 @@ function buildMap() {
 }
 
 function renderMetrics() {
+  const fq = filteredQuotes();
   const m = buildMap();
   const keys = Object.keys(m);
-  const total = quotes.reduce((s,q) => s+(q.amount||0), 0);
-  const days = new Set(quotes.map(q=>q.date)).size;
+  const total = fq.reduce((s,q) => s+(q.amount||0), 0);
+  const days = new Set(fq.map(q=>q.date)).size;
   document.getElementById('m-customers').textContent = keys.length || '—';
-  document.getElementById('m-quotes').textContent = quotes.length || '—';
-  document.getElementById('m-value').textContent = quotes.length ? fmt(total) : '—';
+  document.getElementById('m-quotes').textContent = fq.length || '—';
+  document.getElementById('m-value').textContent = fq.length ? fmt(total) : '—';
   document.getElementById('m-days').textContent = days || '—';
 }
 
@@ -351,7 +338,7 @@ function renderSummary() {
 
 function renderHistory() {
   const byDate = {};
-  quotes.forEach(q => {
+  filteredQuotes().forEach(q => {
     if (!byDate[q.date]) byDate[q.date] = [];
     byDate[q.date].push(q);
   });
@@ -413,12 +400,6 @@ function setSyncing(val) {
 
 async function startSync() {
   if (syncing) return;
-  if (!API_KEY) {
-    document.getElementById('key-banner').style.display = 'flex';
-    document.getElementById('key-input').focus();
-    alert('Please enter your Anthropic API key first.');
-    return;
-  }
   setSyncing(true);
   showTab('log');
   log('Starting Gmail sync for "' + SUBJECT + '"…');
@@ -430,7 +411,14 @@ Task: Find ALL emails from ${SENDER} where the subject contains "${SUBJECT}".
 Steps:
 1. Search Gmail for these emails going back as far as possible (all time).
 2. For each email, get the full message including any PDF attachments.
-3. Read each PDF and extract every quote line item. Each line should have: customer name, quote date, and dollar amount.
+3. Read each PDF and extract every quote line item. The report is titled "Daily Quotes by Warehouse" and has these columns: Quote Number, Cust Number, Cust Name, Entry Date, WH, SP, A/R Ter, Lbs, Matl, Cost, GW, PB, BR, Exp Dt.
+
+   For each line extract:
+   - customer: the Cust Name field
+   - date: the Entry Date field (format as YYYY-MM-DD)
+   - amount: the "Matl" column value (this is the quoted price to the customer — NOT the "Cost" column). Strip commas, return as a plain number.
+   - arTerr: the "A/R Ter" column value. This field is sometimes inconsistently cased in the PDF (e.g. "BH", "Bh", "bh", "JA"). Always return it uppercased. Common values are "BH", "JA", and "HO" (house/cash accounts).
+
 4. If two emails share the same date (sent twice in one day), only process the later one (higher timestamp). De-duplicate by calendar date.
 5. Return ALL extracted quotes — do not summarize or truncate.
 
@@ -439,23 +427,16 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
   "emails_found": <number>,
   "emails_processed": <number>,
   "quotes": [
-    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number, no $ sign>},
+    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number, no $ sign>, "arTerr": "BH"},
     ...
   ]
-}
-
-The date field must be the quote issue date from the PDF (or the email date if not found in the PDF). Amount must be a plain number.`;
+}`;
 
   try {
     log('Calling Anthropic API with Gmail MCP…');
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('/proxy', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'mcp-client-2025-04-04'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 8000,
@@ -507,7 +488,8 @@ The date field must be the quote issue date from the PDF (or the email date if n
     const incoming = parsed.quotes.map(q => ({
       customer: String(q.customer||'Unknown').trim(),
       date: String(q.date||new Date().toISOString().slice(0,10)),
-      amount: typeof q.amount==='number' ? q.amount : parseFloat(String(q.amount||'0').replace(/[^0-9.]/g,''))||0
+      amount: typeof q.amount==='number' ? q.amount : parseFloat(String(q.amount||'0').replace(/[^0-9.]/g,''))||0,
+      arTerr: String(q.arTerr||'').trim().toUpperCase()
     }));
 
     const deduped = new Map();
