@@ -4,7 +4,7 @@ export async function onRequestGet(context) {
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: 'https://quote-dash.pages.dev/oauth/callback',
-    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose',
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent'
