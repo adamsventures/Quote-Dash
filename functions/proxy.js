@@ -1,3 +1,13 @@
+function findPdfs(parts, result) {
+  if (!parts) return;
+  for (const part of parts) {
+    if (part.mimeType === 'application/pdf' && part.body?.attachmentId) {
+      result.push({ attachmentId: part.body.attachmentId });
+    }
+    if (part.parts) findPdfs(part.parts, result);
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -30,31 +40,110 @@ export async function onRequestPost(context) {
         status: 500, headers: { 'Content-Type': 'application/json' }
       });
     }
+    const accessToken = tokenData.access_token;
 
-    // Inject access token into MCP server config
-    const bodyJson = await request.json();
-    if (bodyJson.mcp_servers) {
-      bodyJson.mcp_servers = bodyJson.mcp_servers.map(s => ({
-        ...s,
-        authorization_token: `Bearer ${tokenData.access_token}`
-      }));
+    const { prompt } = await request.json();
+
+    // Search Gmail for matching emails (most recent first, up to 20)
+    const query = 'from:ahb@kgssteel.com subject:"Daily Quotes for Whs 1"';
+    const listResp = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=20`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const listData = await listResp.json();
+    if (listData.error) {
+      return new Response(JSON.stringify({ error: `Gmail search failed: ${listData.error.message}` }), {
+        status: 500, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    const messages = listData.messages || [];
+
+    if (!messages.length) {
+      return new Response(JSON.stringify({
+        content: [{ type: 'text', text: '{"emails_found":0,"emails_processed":0,"quotes":[]}' }]
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    // Fetch all message details in parallel
+    const msgDetails = await Promise.all(
+      messages.map(msg =>
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }).then(r => r.json())
+      )
+    );
+
+    // Deduplicate by calendar date — keep only the latest email per date
+    const dateMap = new Map();
+    for (const msgData of msgDetails) {
+      const internalDate = parseInt(msgData.internalDate);
+      const dateKey = new Date(internalDate).toISOString().slice(0, 10);
+      const pdfParts = [];
+      findPdfs(msgData.payload?.parts, pdfParts);
+      if (pdfParts.length > 0) {
+        const existing = dateMap.get(dateKey);
+        if (!existing || internalDate > existing.internalDate) {
+          dateMap.set(dateKey, { internalDate, msgId: msgData.id, pdfParts });
+        }
+      }
+    }
+
+    // Download all PDF attachments in parallel
+    const docEntries = await Promise.all(
+      Array.from(dateMap.entries()).map(async ([date, { msgId, pdfParts }]) => {
+        const b64s = await Promise.all(
+          pdfParts.map(({ attachmentId }) =>
+            fetch(
+              `https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${attachmentId}`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            ).then(r => r.json()).then(d => d.data.replace(/-/g, '+').replace(/_/g, '/'))
+          )
+        );
+        return { date, b64s };
+      })
+    );
+
+    // Build Claude document content blocks
+    const documents = [];
+    for (const { b64s } of docEntries) {
+      for (const b64 of b64s) {
+        documents.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: b64 }
+        });
+      }
+    }
+
+    if (!documents.length) {
+      return new Response(JSON.stringify({
+        content: [{ type: 'text', text: `{"emails_found":${messages.length},"emails_processed":0,"quotes":[],"error":"No PDF attachments found in emails"}` }]
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Call Claude with PDFs as document attachments — no MCP needed
+    const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'mcp-client-2025-11-20'
+        'anthropic-beta': 'pdfs-2024-09-25'
       },
-      body: JSON.stringify(bodyJson)
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{
+          role: 'user',
+          content: [...documents, { type: 'text', text: prompt }]
+        }]
+      })
     });
 
-    return new Response(resp.body, {
-      status: resp.status,
+    return new Response(claudeResp.body, {
+      status: claudeResp.status,
       headers: { 'Content-Type': 'application/json' }
     });
+
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Unknown proxy error' }), {
       status: 500, headers: { 'Content-Type': 'application/json' }

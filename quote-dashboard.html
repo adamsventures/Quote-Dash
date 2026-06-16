@@ -404,53 +404,34 @@ async function startSync() {
   showTab('log');
   log('Starting Gmail sync for "' + SUBJECT + '"…');
 
-  const prompt = `You are a data extraction assistant with access to Gmail.
+  const prompt = `You are a data extraction assistant. You have been given PDF attachments containing daily steel quote reports.
 
-Task: Find ALL emails from ${SENDER} where the subject contains "${SUBJECT}".
+Each PDF is a "Daily Quotes by Warehouse" report with these columns: Quote Number, Cust Number, Cust Name, Entry Date, WH, SP, A/R Ter, Lbs, Matl, Cost, GW, PB, BR, Exp Dt.
 
-Steps:
-1. Search Gmail for these emails going back as far as possible (all time).
-2. For each email, get the full message including any PDF attachments.
-3. Read each PDF and extract every quote line item. The report is titled "Daily Quotes by Warehouse" and has these columns: Quote Number, Cust Number, Cust Name, Entry Date, WH, SP, A/R Ter, Lbs, Matl, Cost, GW, PB, BR, Exp Dt.
+For EVERY line item in EVERY PDF extract:
+- customer: the Cust Name field
+- date: the Entry Date field (format as YYYY-MM-DD)
+- amount: the "Matl" column value (the quoted price — NOT the "Cost" column). Strip commas, return as a plain number.
+- arTerr: the "A/R Ter" column value, always uppercased (e.g. "BH", "JA", "HO").
 
-   For each line extract:
-   - customer: the Cust Name field
-   - date: the Entry Date field (format as YYYY-MM-DD)
-   - amount: the "Matl" column value (this is the quoted price to the customer — NOT the "Cost" column). Strip commas, return as a plain number.
-   - arTerr: the "A/R Ter" column value. This field is sometimes inconsistently cased in the PDF (e.g. "BH", "Bh", "bh", "JA"). Always return it uppercased. Common values are "BH", "JA", and "HO" (house/cash accounts).
-
-4. If two emails share the same date (sent twice in one day), only process the later one (higher timestamp). De-duplicate by calendar date.
-5. Return ALL extracted quotes — do not summarize or truncate.
+Return ALL extracted quotes — do not summarize or truncate.
 
 Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
 {
-  "emails_found": <number>,
-  "emails_processed": <number>,
+  "emails_found": <number of PDFs provided>,
+  "emails_processed": <number of PDFs successfully read>,
   "quotes": [
-    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number, no $ sign>, "arTerr": "BH"},
+    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number>, "arTerr": "BH"},
     ...
   ]
 }`;
 
   try {
-    log('Calling Anthropic API with Gmail MCP…');
+    log('Fetching emails and PDFs from Gmail…');
     const resp = await fetch('/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8000,
-        messages: [{role:'user', content: prompt}],
-        mcp_servers: [{
-          type: 'url',
-          url: 'https://gmailmcp.googleapis.com/mcp/v1',
-          name: 'gmail'
-        }],
-        tools: [{
-          type: 'mcp_toolset',
-          mcp_server_name: 'gmail'
-        }]
-      })
+      body: JSON.stringify({ prompt })
     });
 
     if (!resp.ok) {
@@ -459,12 +440,7 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
     }
 
     const data = await resp.json();
-    const toolCalls = (data.content||[]).filter(b=>b.type==='mcp_tool_use');
-    const toolResults = (data.content||[]).filter(b=>b.type==='mcp_tool_result');
     const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
-
-    log('MCP calls: ' + (toolCalls.map(t=>t.name).join(', ')||'none'));
-    log('Tool results: ' + toolResults.length);
 
     let parsed = null;
     const tryParse = str => {
@@ -473,14 +449,6 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
       return null;
     };
     parsed = tryParse(textBlocks);
-    if (!parsed) {
-      for (const b of toolResults) {
-        const txt = (b?.content?.[0]?.text)||'';
-        parsed = tryParse(txt);
-        if (parsed) break;
-      }
-    }
-
     if (!parsed || !Array.isArray(parsed.quotes)) {
       log('Could not find structured JSON in response. Preview: ' + textBlocks.slice(0,400), 'error');
       throw new Error('No structured data returned — see log for details.');
