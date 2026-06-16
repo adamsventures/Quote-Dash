@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Quote Dashboard — Whs 1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede9;
+    --text: #1a1a18; --text2: #6b6b67; --text3: #9a9a96;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --accent: #185FA5; --accent-bg: #E6F1FB; --accent-text: #0C447C;
+    --success: #3B6D11; --success-bg: #EAF3DE; --success-text: #27500A;
+    --warn: #854F0B; --warn-bg: #FAEEDA;
+    --danger: #A32D2D; --danger-bg: #FCEBEB; --danger-text: #791F1F;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c; --bg2: #2a2a28; --bg3: #323230;
+      --text: #f0efeb; --text2: #b0b0ac; --text3: #787874;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --accent: #85B7EB; --accent-bg: #042C53; --accent-text: #B5D4F4;
+      --success: #C0DD97; --success-bg: #173404; --success-text: #C0DD97;
+      --warn: #FAC775; --warn-bg: #412402;
+      --danger: #F7C1C1; --danger-bg: #501313; --danger-text: #F7C1C1;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg2); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  .shell { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
+  .top-bar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+  .brand h1 { font-size: 22px; font-weight: 500; margin-bottom: 3px; display: flex; align-items: center; gap: 8px; }
+  .brand .subtitle { color: var(--text2); font-size: 13px; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  button { background: var(--bg); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, transform 0.1s; font-family: inherit; }
+  button:hover { background: var(--bg3); }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  button.primary { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-text); font-weight: 500; }
+  button.primary:hover { filter: brightness(0.95); }
+  button.danger-btn { background: var(--danger-bg); border-color: var(--danger); color: var(--danger-text); }
+  .key-banner { background: var(--warn-bg); border: 0.5px solid var(--warn); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text); }
+  .key-banner input { flex: 1; min-width: 220px; background: var(--bg); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 7px 11px; font-size: 13px; font-family: 'SF Mono','Fira Mono',monospace; color: var(--text); outline: none; }
+  .key-banner input:focus { border-color: var(--accent); }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 24px; }
+  .metric { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .metric-value { font-size: 26px; font-weight: 500; line-height: 1; }
+  .metric-value.blue { color: var(--accent-text); }
+  .metric-value.green { color: var(--success); }
+  .tabs { display: flex; gap: 2px; background: var(--bg3); border-radius: var(--radius-sm); padding: 3px; width: fit-content; margin-bottom: 20px; }
+  .tab { padding: 7px 18px; border-radius: 5px; font-size: 13px; cursor: pointer; color: var(--text2); border: none; background: none; font-family: inherit; transition: background 0.12s; }
+  .tab.active { background: var(--bg); color: var(--text); font-weight: 500; border: 0.5px solid var(--border); }
+  .tab:hover:not(.active) { background: var(--bg2); }
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 18px 22px; margin-bottom: 18px; }
+  .card-title { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px; }
+  .chart-wrap { position: relative; width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--text2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-bottom: 0.5px solid var(--border); }
+  td { padding: 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--bg2); }
+  tfoot td { font-weight: 500; color: var(--text2); background: var(--bg2); }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .c { text-align: center; }
+  .fw { font-weight: 500; }
+  .badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-weight: 500; display: inline-block; }
+  .badge-blue { background: var(--accent-bg); color: var(--accent-text); }
+  .badge-green { background: var(--success-bg); color: var(--success-text); }
+  .filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-row input, .filter-row select { background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 7px 11px; font-size: 13px; color: var(--text); font-family: inherit; outline: none; }
+  .filter-row input:focus, .filter-row select:focus { border-color: var(--accent); }
+  .filter-row input { flex: 1; min-width: 160px; }
+  .progress-wrap { background: var(--bg3); border-radius: 3px; height: 5px; min-width: 80px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+  .log-box { background: var(--bg2); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 12px; color: var(--text2); max-height: 280px; overflow-y: auto; font-family: 'SF Mono', 'Fira Mono', monospace; line-height: 1.9; border: 0.5px solid var(--border); }
+  .le { display: flex; gap: 10px; }
+  .le .ts { color: var(--text3); min-width: 76px; flex-shrink: 0; }
+  .le.err .msg { color: var(--danger); }
+  .le.ok .msg { color: var(--success); }
+  .empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+  .empty i { font-size: 40px; display: block; margin: 0 auto 12px; color: var(--text3); }
+  .empty p { font-size: 13px; max-width: 260px; margin: 0 auto; }
+  .spinning { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--bg3); color: var(--text2); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .dot.live { background: #3B6D11; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+  .section-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+  a.gh-link { font-size: 12px; color: var(--text3); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  a.gh-link:hover { color: var(--accent-text); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="top-bar">
+    <div class="brand">
+      <h1><i class="ti ti-chart-bar" aria-hidden="true" style="color:var(--accent-text)"></i> Quote Dashboard</h1>
+      <div class="subtitle">Warehouse 1 &nbsp;·&nbsp; <span id="sync-status">Never synced</span></div>
+    </div>
+    <div class="actions">
+      <button class="danger-btn" onclick="clearData()" id="clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear data</button>
+      <button class="primary" onclick="startSync()" id="sync-btn"><i class="ti ti-refresh" id="sync-icon" aria-hidden="true"></i> <span id="sync-label">Sync Gmail</span></button>
+    </div>
+  </div>
+
+  <div class="key-banner" id="key-banner" style="display:none">
+    <i class="ti ti-key" style="color:var(--warn);flex-shrink:0"></i>
+    <span style="flex-shrink:0">Anthropic API key:</span>
+    <input type="password" id="key-input" placeholder="sk-ant-api03-…" autocomplete="off" />
+    <button onclick="saveKey()"><i class="ti ti-check"></i> Save</button>
+    <button onclick="clearKey()" class="danger-btn"><i class="ti ti-x"></i> Clear</button>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label"><i class="ti ti-users" aria-hidden="true"></i> Customers</div>
+      <div class="metric-value blue" id="m-customers">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><i class="ti ti-file-text" aria-hidden="true"></i> Total quotes</div>
+      <div class="metric-value" id="m-quotes">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><i class="ti ti-currency-dollar" aria-hidden="true"></i> Total value</div>
+      <div class="metric-value green" id="m-value">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label"><i class="ti ti-calendar" aria-hidden="true"></i> Days tracked</div>
+      <div class="metric-value" id="m-days">—</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('summary')" id="tab-summary">By customer</button>
+    <button class="tab" onclick="showTab('history')" id="tab-history">Date history</button>
+    <button class="tab" onclick="showTab('log')" id="tab-log">Sync log</button>
+  </div>
+
+  <!-- SUMMARY TAB -->
+  <div id="view-summary">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Quote value by customer</div>
+      <div class="chart-wrap" id="chart-wrap" style="height:280px;">
+        <div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Gmail" to load data</p></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-table" aria-hidden="true"></i> Customer breakdown</div>
+      <div class="filter-row">
+        <input type="text" id="cust-search" placeholder="Search customer…" oninput="renderSummary()" />
+        <select id="cust-sort" onchange="renderSummary()">
+          <option value="value">Sort: value</option>
+          <option value="count">Sort: count</option>
+          <option value="name">Sort: name A–Z</option>
+        </select>
+      </div>
+      <div id="summary-wrap"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div id="view-history" style="display:none">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-calendar" aria-hidden="true"></i> Daily quote history</div>
+      <div id="history-wrap"></div>
+    </div>
+  </div>
+
+  <!-- LOG TAB -->
+  <div id="view-log" style="display:none">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-terminal" aria-hidden="true"></i> Sync log</div>
+      <div class="log-box" id="log-box"><div style="color:var(--text3)">No sync yet.</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API_KEY_STORE = 'whs1_api_key';
+let API_KEY = localStorage.getItem(API_KEY_STORE) || '';
+const SENDER = 'ahb@kgssteel.com';
+const SUBJECT = 'Daily Quotes for Whs 1';
+const STORE_KEY = 'whs1_quotes_v2';
+const LOG_KEY = 'whs1_log_v2';
+const SYNC_KEY = 'whs1_last_sync';
+
+let quotes = [];
+let syncLog = [];
+let custChart = null;
+let syncing = false;
+
+function updateKeyBanner() {
+  const banner = document.getElementById('key-banner');
+  const input = document.getElementById('key-input');
+  banner.style.display = API_KEY ? 'none' : 'flex';
+  if (!API_KEY) input.value = '';
+}
+
+function saveKey() {
+  const val = document.getElementById('key-input').value.trim();
+  if (!val.startsWith('sk-ant-')) { alert('That doesn\'t look like an Anthropic API key (should start with sk-ant-).'); return; }
+  API_KEY = val;
+  localStorage.setItem(API_KEY_STORE, API_KEY);
+  updateKeyBanner();
+}
+
+function clearKey() {
+  API_KEY = '';
+  localStorage.removeItem(API_KEY_STORE);
+  updateKeyBanner();
+}
+
+function load() {
+  try { quotes = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { quotes = []; }
+  try { syncLog = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch(e) { syncLog = []; }
+  const ls = localStorage.getItem(SYNC_KEY);
+  document.getElementById('sync-status').textContent = ls ? 'Last synced ' + ls : 'Never synced';
+  updateKeyBanner();
+  renderAll();
+}
+
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(quotes));
+  localStorage.setItem(LOG_KEY, JSON.stringify(syncLog.slice(-300)));
+}
+
+function log(msg, type) {
+  const ts = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  syncLog.push({ts, msg, type: type || 'info'});
+  renderLog();
+}
+
+function showTab(name) {
+  ['summary','history','log'].forEach(t => {
+    document.getElementById('view-'+t).style.display = t===name?'':'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+  });
+}
+
+function fmt(n) {
+  if (n >= 1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if (n >= 1e3) return '$'+(n/1e3).toFixed(1)+'K';
+  return '$'+Math.round(n).toLocaleString();
+}
+function fmtFull(n) {
+  return n.toLocaleString('en-US', {style:'currency', currency:'USD', minimumFractionDigits:2});
+}
+
+function buildMap() {
+  const m = {};
+  quotes.forEach(q => {
+    if (!m[q.customer]) m[q.customer] = {count:0, total:0};
+    m[q.customer].count++;
+    m[q.customer].total += q.amount || 0;
+  });
+  return m;
+}
+
+function renderMetrics() {
+  const m = buildMap();
+  const keys = Object.keys(m);
+  const total = quotes.reduce((s,q) => s+(q.amount||0), 0);
+  const days = new Set(quotes.map(q=>q.date)).size;
+  document.getElementById('m-customers').textContent = keys.length || '—';
+  document.getElementById('m-quotes').textContent = quotes.length || '—';
+  document.getElementById('m-value').textContent = quotes.length ? fmt(total) : '—';
+  document.getElementById('m-days').textContent = days || '—';
+}
+
+function renderChart() {
+  const wrap = document.getElementById('chart-wrap');
+  const m = buildMap();
+  const entries = Object.entries(m).sort((a,b)=>b[1].total-a[1].total).slice(0,20);
+  if (!entries.length) {
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Gmail" to load data</p></div>';
+    return;
+  }
+  const h = Math.max(280, entries.length * 38 + 80);
+  wrap.style.height = h + 'px';
+  wrap.innerHTML = '<canvas id="cc" role="img" aria-label="Horizontal bar chart of quote value by customer"></canvas>';
+  if (custChart) { custChart.destroy(); custChart = null; }
+  const palette = ['#378ADD','#1D9E75','#EF9F27','#D85A30','#7F77DD','#D4537E','#185FA5','#3B6D11','#854F0B','#534AB7','#0F6E56','#BA7517','#993556','#888780','#993C1D'];
+  custChart = new Chart(document.getElementById('cc'), {
+    type: 'bar',
+    data: {
+      labels: entries.map(e=>e[0]),
+      datasets: [{
+        label: 'Total value',
+        data: entries.map(e=>e[1].total),
+        backgroundColor: entries.map((_,i)=>palette[i%palette.length]+'bb'),
+        borderColor: entries.map((_,i)=>palette[i%palette.length]),
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {callbacks:{label: ctx=>' '+fmtFull(ctx.parsed.x)}}
+      },
+      scales: {
+        x: {ticks:{callback:v=>fmt(v),color:'#888',font:{size:11}}, grid:{color:'rgba(128,128,128,0.08)'}},
+        y: {ticks:{color:'#888',font:{size:12}}, grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderSummary() {
+  const m = buildMap();
+  const q = (document.getElementById('cust-search').value||'').toLowerCase();
+  const sort = document.getElementById('cust-sort').value;
+  let entries = Object.entries(m).filter(([n])=>n.toLowerCase().includes(q));
+  if (sort==='value') entries.sort((a,b)=>b[1].total-a[1].total);
+  else if (sort==='count') entries.sort((a,b)=>b[1].count-a[1].count);
+  else entries.sort((a,b)=>a[0].localeCompare(b[0]));
+  const maxV = entries.length ? Math.max(...entries.map(e=>e[1].total)) : 1;
+  const wrap = document.getElementById('summary-wrap');
+  if (!entries.length) {
+    wrap.innerHTML = '<div class="empty" style="padding:24px"><i class="ti ti-users" style="font-size:28px;display:block;margin-bottom:8px;color:var(--text3)"></i><p>'+(quotes.length?'No match':'Sync Gmail to see data')+'</p></div>';
+    return;
+  }
+  const totalV = entries.reduce((s,e)=>s+e[1].total,0);
+  const totalC = entries.reduce((s,e)=>s+e[1].count,0);
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Customer</th><th class="c">Quotes</th><th>Share</th><th class="r">Total value</th></tr></thead>
+    <tbody>${entries.map(([name,d])=>`<tr>
+      <td class="fw">${name}</td>
+      <td class="c"><span class="badge badge-blue">${d.count}</span></td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div class="progress-wrap" style="flex:1"><div class="progress-fill" style="width:${Math.round(d.total/maxV*100)}%"></div></div>
+        <span style="font-size:11px;color:var(--text2);min-width:32px">${Math.round(d.total/totalV*100)}%</span>
+      </div></td>
+      <td class="r">${fmtFull(d.total)}</td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr>
+      <td>Total</td><td class="c">${totalC}</td><td></td><td class="r">${fmtFull(totalV)}</td>
+    </tr></tfoot>
+  </table>`;
+}
+
+function renderHistory() {
+  const byDate = {};
+  quotes.forEach(q => {
+    if (!byDate[q.date]) byDate[q.date] = [];
+    byDate[q.date].push(q);
+  });
+  const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  const wrap = document.getElementById('history-wrap');
+  if (!dates.length) {
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-calendar"></i><p>Sync Gmail to see history</p></div>';
+    return;
+  }
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Date</th><th>Customer</th><th class="r">Amount</th></tr></thead>
+    <tbody>${dates.flatMap(date=>{
+      const rows = byDate[date];
+      const dayTotal = rows.reduce((s,q)=>s+(q.amount||0),0);
+      return rows.map((q,i)=>`<tr>
+        ${i===0?`<td rowspan="${rows.length}" style="vertical-align:top;padding-top:11px;white-space:nowrap">
+          <div class="fw">${q.date}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${rows.length} quote${rows.length!==1?'s':''} · ${fmt(dayTotal)}</div>
+        </td>`:''}
+        <td>${q.customer}</td>
+        <td class="r">${q.amount?fmtFull(q.amount):'—'}</td>
+      </tr>`);
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderLog() {
+  const el = document.getElementById('log-box');
+  if (!syncLog.length) { el.innerHTML = '<div style="color:var(--text3)">No sync yet.</div>'; return; }
+  el.innerHTML = syncLog.slice(-150).reverse().map(e=>
+    `<div class="le ${e.type==='error'?'err':e.type==='ok'?'ok':''}"><span class="ts">${e.ts}</span><span class="msg">${e.msg}</span></div>`
+  ).join('');
+}
+
+function renderAll() {
+  renderMetrics();
+  renderChart();
+  renderSummary();
+  renderHistory();
+  renderLog();
+}
+
+function clearData() {
+  if (!confirm('Clear all stored quote data? This cannot be undone.')) return;
+  quotes = []; syncLog = [];
+  localStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(LOG_KEY);
+  localStorage.removeItem(SYNC_KEY);
+  document.getElementById('sync-status').textContent = 'Never synced';
+  renderAll();
+}
+
+function setSyncing(val) {
+  syncing = val;
+  document.getElementById('sync-btn').disabled = val;
+  document.getElementById('sync-icon').className = val ? 'ti ti-refresh spinning' : 'ti ti-refresh';
+  document.getElementById('sync-label').textContent = val ? 'Syncing…' : 'Sync Gmail';
+}
+
+async function startSync() {
+  if (syncing) return;
+  if (!API_KEY) {
+    document.getElementById('key-banner').style.display = 'flex';
+    document.getElementById('key-input').focus();
+    alert('Please enter your Anthropic API key first.');
+    return;
+  }
+  setSyncing(true);
+  showTab('log');
+  log('Starting Gmail sync for "' + SUBJECT + '"…');
+
+  const prompt = `You are a data extraction assistant with access to Gmail.
+
+Task: Find ALL emails from ${SENDER} where the subject contains "${SUBJECT}".
+
+Steps:
+1. Search Gmail for these emails going back as far as possible (all time).
+2. For each email, get the full message including any PDF attachments.
+3. Read each PDF and extract every quote line item. Each line should have: customer name, quote date, and dollar amount.
+4. If two emails share the same date (sent twice in one day), only process the later one (higher timestamp). De-duplicate by calendar date.
+5. Return ALL extracted quotes — do not summarize or truncate.
+
+Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
+{
+  "emails_found": <number>,
+  "emails_processed": <number>,
+  "quotes": [
+    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number, no $ sign>},
+    ...
+  ]
+}
+
+The date field must be the quote issue date from the PDF (or the email date if not found in the PDF). Amount must be a plain number.`;
+
+  try {
+    log('Calling Anthropic API with Gmail MCP…');
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'mcp-client-2025-04-04'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{role:'user', content: prompt}],
+        mcp_servers: [{
+          type: 'url',
+          url: 'https://gmailmcp.googleapis.com/mcp/v1',
+          name: 'gmail'
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error('API ' + resp.status + ': ' + err.slice(0, 300));
+    }
+
+    const data = await resp.json();
+    const toolCalls = (data.content||[]).filter(b=>b.type==='mcp_tool_use');
+    const toolResults = (data.content||[]).filter(b=>b.type==='mcp_tool_result');
+    const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+
+    log('MCP calls: ' + (toolCalls.map(t=>t.name).join(', ')||'none'));
+    log('Tool results: ' + toolResults.length);
+
+    let parsed = null;
+    const tryParse = str => {
+      const m = str.match(/\{[\s\S]*?"quotes"[\s\S]*?\}/);
+      if (m) try { return JSON.parse(m[0]); } catch(e) {}
+      return null;
+    };
+    parsed = tryParse(textBlocks);
+    if (!parsed) {
+      for (const b of toolResults) {
+        const txt = (b?.content?.[0]?.text)||'';
+        parsed = tryParse(txt);
+        if (parsed) break;
+      }
+    }
+
+    if (!parsed || !Array.isArray(parsed.quotes)) {
+      log('Could not find structured JSON in response. Preview: ' + textBlocks.slice(0,400), 'error');
+      throw new Error('No structured data returned — see log for details.');
+    }
+
+    log('Emails found: ' + parsed.emails_found + ', processed: ' + parsed.emails_processed, 'ok');
+    log('Quotes extracted: ' + parsed.quotes.length, 'ok');
+
+    const incoming = parsed.quotes.map(q => ({
+      customer: String(q.customer||'Unknown').trim(),
+      date: String(q.date||new Date().toISOString().slice(0,10)),
+      amount: typeof q.amount==='number' ? q.amount : parseFloat(String(q.amount||'0').replace(/[^0-9.]/g,''))||0
+    }));
+
+    const deduped = new Map();
+    [...quotes, ...incoming].forEach(q => {
+      const key = q.date + '|' + q.customer.toLowerCase();
+      deduped.set(key, q);
+    });
+    quotes = Array.from(deduped.values()).sort((a,b)=>b.date.localeCompare(a.date));
+
+    const now = new Date().toLocaleString();
+    localStorage.setItem(SYNC_KEY, now);
+    document.getElementById('sync-status').textContent = 'Last synced ' + now;
+    log('Done. Total quotes stored: ' + quotes.length, 'ok');
+    save();
+    renderAll();
+    showTab('summary');
+  } catch(e) {
+    log('Error: ' + e.message, 'error');
+    alert('Sync failed: ' + e.message + '\n\nCheck the Sync Log tab for details.');
+  } finally {
+    setSyncing(false);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
