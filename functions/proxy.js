@@ -22,8 +22,8 @@ export async function onRequestPost(context) {
       body
     });
 
-    const data = await resp.text();
-    return new Response(data, {
+    // Stream response body straight through instead of buffering
+    return new Response(resp.body, {
       status: resp.status,
       headers: { 'Content-Type': 'application/json' }
     });
