@@ -101,11 +101,6 @@
       <div class="subtitle">Warehouse 1 &nbsp;·&nbsp; <span id="sync-status">Never synced</span></div>
     </div>
     <div class="actions">
-      <div style="display:flex;gap:4px;background:var(--bg3);border-radius:var(--radius-sm);padding:3px;">
-        <button class="tab active" id="rep-all" onclick="setRep('ALL')" style="padding:6px 14px;font-size:12px;">All</button>
-        <button class="tab" id="rep-BH" onclick="setRep('BH')" style="padding:6px 14px;font-size:12px;">BH</button>
-        <button class="tab" id="rep-JA" onclick="setRep('JA')" style="padding:6px 14px;font-size:12px;">JA</button>
-      </div>
       <button class="danger-btn" onclick="clearData()" id="clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear data</button>
       <button class="primary" onclick="startSync()" id="sync-btn"><i class="ti ti-refresh" id="sync-icon" aria-hidden="true"></i> <span id="sync-label">Sync Gmail</span></button>
     </div>
@@ -177,6 +172,7 @@
 </div>
 
 <script>
+const API_KEY = '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';
 const SENDER = 'ahb@kgssteel.com';
 const SUBJECT = 'Daily Quotes for Whs 1';
 const STORE_KEY = 'whs1_quotes_v2';
@@ -187,22 +183,6 @@ let quotes = [];
 let syncLog = [];
 let custChart = null;
 let syncing = false;
-let activeRep = 'ALL';
-
-function setRep(rep) {
-  activeRep = rep;
-  ['ALL','BH','JA'].forEach(r => {
-    const id = r === 'ALL' ? 'rep-all' : 'rep-' + r;
-    document.getElementById(id).classList.toggle('active', r === rep);
-  });
-  renderAll();
-}
-
-function filteredQuotes() {
-  if (activeRep === 'ALL') return quotes;
-  return quotes.filter(q => q.arTerr === activeRep);
-}
-
 
 function load() {
   try { quotes = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { quotes = []; }
@@ -241,7 +221,7 @@ function fmtFull(n) {
 
 function buildMap() {
   const m = {};
-  filteredQuotes().forEach(q => {
+  quotes.forEach(q => {
     if (!m[q.customer]) m[q.customer] = {count:0, total:0};
     m[q.customer].count++;
     m[q.customer].total += q.amount || 0;
@@ -250,14 +230,13 @@ function buildMap() {
 }
 
 function renderMetrics() {
-  const fq = filteredQuotes();
   const m = buildMap();
   const keys = Object.keys(m);
-  const total = fq.reduce((s,q) => s+(q.amount||0), 0);
-  const days = new Set(fq.map(q=>q.date)).size;
+  const total = quotes.reduce((s,q) => s+(q.amount||0), 0);
+  const days = new Set(quotes.map(q=>q.date)).size;
   document.getElementById('m-customers').textContent = keys.length || '—';
-  document.getElementById('m-quotes').textContent = fq.length || '—';
-  document.getElementById('m-value').textContent = fq.length ? fmt(total) : '—';
+  document.getElementById('m-quotes').textContent = quotes.length || '—';
+  document.getElementById('m-value').textContent = quotes.length ? fmt(total) : '—';
   document.getElementById('m-days').textContent = days || '—';
 }
 
@@ -338,7 +317,7 @@ function renderSummary() {
 
 function renderHistory() {
   const byDate = {};
-  filteredQuotes().forEach(q => {
+  quotes.forEach(q => {
     if (!byDate[q.date]) byDate[q.date] = [];
     byDate[q.date].push(q);
   });
@@ -404,46 +383,71 @@ async function startSync() {
   showTab('log');
   log('Starting Gmail sync for "' + SUBJECT + '"…');
 
-  const prompt = `You are a data extraction assistant. You have been given PDF attachments containing daily steel quote reports.
+  const prompt = `You are a data extraction assistant with access to Gmail.
 
-Each PDF is a "Daily Quotes by Warehouse" report with these columns: Quote Number, Cust Number, Cust Name, Entry Date, WH, SP, A/R Ter, Lbs, Matl, Cost, GW, PB, BR, Exp Dt.
+Task: Find ALL emails from ${SENDER} where the subject contains "${SUBJECT}".
 
-For EVERY line item in EVERY PDF extract:
-- customer: the Cust Name field
-- date: the Entry Date field (format as YYYY-MM-DD)
-- amount: the "Matl" column value (the quoted price — NOT the "Cost" column). Strip commas, return as a plain number.
-- arTerr: the "A/R Ter" column value, always uppercased (e.g. "BH", "JA", "HO").
-
-Return ALL extracted quotes — do not summarize or truncate.
+Steps:
+1. Search Gmail for these emails going back as far as possible (all time).
+2. For each email, get the full message including any PDF attachments.
+3. Read each PDF and extract every quote line item. Each line should have: customer name, quote date, and dollar amount.
+4. If two emails share the same date (sent twice in one day), only process the later one (higher timestamp). De-duplicate by calendar date.
+5. Return ALL extracted quotes — do not summarize or truncate.
 
 Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
 {
-  "emails_found": <number of PDFs provided>,
-  "emails_processed": <number of PDFs successfully read>,
+  "emails_found": <number>,
+  "emails_processed": <number>,
   "quotes": [
-    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number>, "arTerr": "BH"},
+    {"customer": "CUSTOMER NAME", "date": "YYYY-MM-DD", "amount": <number, no $ sign>},
     ...
   ]
-}`;
+}
 
-  try {
-    const latestDate = quotes.length ? quotes.reduce((max, q) => q.date > max ? q.date : max, '') : null;
-    if (latestDate) log('Incremental sync — fetching emails after ' + latestDate);
-    else log('Full sync — fetching up to 20 most recent emails…');
+The date field must be the quote issue date from the PDF (or the email date if not found in the PDF). Amount must be a plain number.`;
 
-    const resp = await fetch('/proxy', {
+  async function callClaude(messages, useGmail) {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY,
+      'anthropic-version': '2023-06-01'
+    };
+    const body = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8000,
+      messages
+    };
+    if (useGmail) {
+      headers['anthropic-beta'] = 'mcp-client-2025-04-04';
+      body.mcp_servers = [{
+        type: 'url',
+        url: 'https://gmailmcp.googleapis.com/mcp/v1',
+        name: 'gmail'
+      }];
+    }
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, since: latestDate })
+      headers,
+      body: JSON.stringify(body)
     });
-
     if (!resp.ok) {
       const err = await resp.text();
       throw new Error('API ' + resp.status + ': ' + err.slice(0, 300));
     }
+    return resp.json();
+  }
 
-    const data = await resp.json();
+  try {
+    log('Calling Anthropic API with Gmail MCP…');
+
+    const data = await callClaude([{role:'user', content: prompt}], true);
+
+    const toolCalls = (data.content||[]).filter(b=>b.type==='mcp_tool_use');
+    const toolResults = (data.content||[]).filter(b=>b.type==='mcp_tool_result');
     const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+
+    log('MCP calls: ' + (toolCalls.map(t=>t.name).join(', ')||'none'));
+    log('Tool results: ' + toolResults.length);
 
     let parsed = null;
     const tryParse = str => {
@@ -452,6 +456,29 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
       return null;
     };
     parsed = tryParse(textBlocks);
+    if (!parsed) {
+      for (const b of toolResults) {
+        const txt = (b?.content?.[0]?.text)||'';
+        parsed = tryParse(txt);
+        if (parsed) break;
+      }
+    }
+
+    // If still no structured data, ask Claude to extract from what it returned
+    if (!parsed || !Array.isArray(parsed.quotes)) {
+      log('First pass returned no structured data — retrying extraction…');
+      const rawContent = textBlocks + '\n' + toolResults.map(b=>b?.content?.[0]?.text||'').join('\n');
+      if (!rawContent.trim()) {
+        throw new Error('No data returned from Gmail. Check that Gmail is connected and emails exist.');
+      }
+      const data2 = await callClaude([{
+        role: 'user',
+        content: `Extract all quote line items from the following email/PDF content and return ONLY a JSON object with no markdown:\n\n${rawContent.slice(0,12000)}\n\nFormat:\n{"emails_found":N,"emails_processed":N,"quotes":[{"customer":"...","date":"YYYY-MM-DD","amount":0}]}`
+      }], false);
+      const text2 = (data2.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+      parsed = tryParse(text2);
+    }
+
     if (!parsed || !Array.isArray(parsed.quotes)) {
       log('Could not find structured JSON in response. Preview: ' + textBlocks.slice(0,400), 'error');
       throw new Error('No structured data returned — see log for details.');
@@ -463,8 +490,7 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
     const incoming = parsed.quotes.map(q => ({
       customer: String(q.customer||'Unknown').trim(),
       date: String(q.date||new Date().toISOString().slice(0,10)),
-      amount: typeof q.amount==='number' ? q.amount : parseFloat(String(q.amount||'0').replace(/[^0-9.]/g,''))||0,
-      arTerr: String(q.arTerr||'').trim().toUpperCase()
+      amount: typeof q.amount==='number' ? q.amount : parseFloat(String(q.amount||'0').replace(/[^0-9.]/g,''))||0
     }));
 
     const deduped = new Map();
