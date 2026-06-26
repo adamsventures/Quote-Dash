@@ -98,11 +98,12 @@
   <div class="top-bar">
     <div class="brand">
       <h1><i class="ti ti-chart-bar" aria-hidden="true" style="color:var(--accent-text)"></i> Quote Dashboard</h1>
-      <div class="subtitle">Warehouse 1 &nbsp;·&nbsp; <span id="sync-status">Never synced</span></div>
+      <div class="subtitle">Warehouse 1 &nbsp;·&nbsp; <span id="sync-status">Never synced</span> &nbsp;·&nbsp; <span id="key-status" style="color:var(--text3)">No API key set</span></div>
     </div>
     <div class="actions">
+      <button onclick="promptForApiKey()" title="Set API key"><i class="ti ti-key" aria-hidden="true"></i> API Key</button>
       <button class="danger-btn" onclick="clearData()" id="clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear data</button>
-      <button class="primary" onclick="startSync()" id="sync-btn"><i class="ti ti-refresh" id="sync-icon" aria-hidden="true"></i> <span id="sync-label">Sync Gmail</span></button>
+      <button class="primary" onclick="startSync()" id="sync-btn"><i class="ti ti-refresh" id="sync-icon" aria-hidden="true"></i> <span id="sync-label">Sync Outlook</span></button>
     </div>
   </div>
 
@@ -136,7 +137,7 @@
     <div class="card">
       <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Quote value by customer</div>
       <div class="chart-wrap" id="chart-wrap" style="height:280px;">
-        <div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Gmail" to load data</p></div>
+        <div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Outlook" to load data</p></div>
       </div>
     </div>
     <div class="card">
@@ -172,8 +173,31 @@
 </div>
 
 <script>
-const API_KEY = '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';
+const API_KEY_STORE = 'whs1_api_key';
 const SENDER = 'ahb@kgssteel.com';
+
+function getApiKey() {
+  return localStorage.getItem(API_KEY_STORE) || '';
+}
+
+function promptForApiKey() {
+  const existing = getApiKey();
+  const key = window.prompt(
+    existing
+      ? 'Update your Anthropic API key (leave blank to keep current):'
+      : 'Enter your Anthropic API key (starts with sk-ant-).\n\nThis is stored only in your browser — never in the page code.',
+    ''
+  );
+  if (key && key.trim().startsWith('sk-ant-')) {
+    localStorage.setItem(API_KEY_STORE, key.trim());
+    updateKeyStatus();
+    return key.trim();
+  } else if (key !== null && key.trim()) {
+    alert("That doesn\'t look like a valid Anthropic API key (should start with sk-ant-).");
+    return null;
+  }
+  return existing || null;
+}
 const SUBJECT = 'Daily Quotes for Whs 1';
 const STORE_KEY = 'whs1_quotes_v2';
 const LOG_KEY = 'whs1_log_v2';
@@ -184,11 +208,19 @@ let syncLog = [];
 let custChart = null;
 let syncing = false;
 
+function updateKeyStatus() {
+  const k = getApiKey();
+  const el = document.getElementById('key-status');
+  if (k) { el.textContent = 'API key set ✓'; el.style.color = 'var(--success)'; }
+  else { el.textContent = 'No API key'; el.style.color = 'var(--danger)'; }
+}
+
 function load() {
   try { quotes = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { quotes = []; }
   try { syncLog = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch(e) { syncLog = []; }
   const ls = localStorage.getItem(SYNC_KEY);
   document.getElementById('sync-status').textContent = ls ? 'Last synced ' + ls : 'Never synced';
+  updateKeyStatus();
   renderAll();
 }
 
@@ -245,7 +277,7 @@ function renderChart() {
   const m = buildMap();
   const entries = Object.entries(m).sort((a,b)=>b[1].total-a[1].total).slice(0,20);
   if (!entries.length) {
-    wrap.innerHTML = '<div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Gmail" to load data</p></div>';
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-chart-bar"></i><p>Click "Sync Outlook" to load data</p></div>';
     return;
   }
   const h = Math.max(280, entries.length * 38 + 80);
@@ -293,7 +325,7 @@ function renderSummary() {
   const maxV = entries.length ? Math.max(...entries.map(e=>e[1].total)) : 1;
   const wrap = document.getElementById('summary-wrap');
   if (!entries.length) {
-    wrap.innerHTML = '<div class="empty" style="padding:24px"><i class="ti ti-users" style="font-size:28px;display:block;margin-bottom:8px;color:var(--text3)"></i><p>'+(quotes.length?'No match':'Sync Gmail to see data')+'</p></div>';
+    wrap.innerHTML = '<div class="empty" style="padding:24px"><i class="ti ti-users" style="font-size:28px;display:block;margin-bottom:8px;color:var(--text3)"></i><p>'+(quotes.length?'No match':'Sync Outlook to see data')+'</p></div>';
     return;
   }
   const totalV = entries.reduce((s,e)=>s+e[1].total,0);
@@ -324,7 +356,7 @@ function renderHistory() {
   const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
   const wrap = document.getElementById('history-wrap');
   if (!dates.length) {
-    wrap.innerHTML = '<div class="empty"><i class="ti ti-calendar"></i><p>Sync Gmail to see history</p></div>';
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-calendar"></i><p>Sync Outlook to see history</p></div>';
     return;
   }
   wrap.innerHTML = `<table>
@@ -374,7 +406,7 @@ function setSyncing(val) {
   syncing = val;
   document.getElementById('sync-btn').disabled = val;
   document.getElementById('sync-icon').className = val ? 'ti ti-refresh spinning' : 'ti ti-refresh';
-  document.getElementById('sync-label').textContent = val ? 'Syncing…' : 'Sync Gmail';
+  document.getElementById('sync-label').textContent = val ? 'Syncing…' : 'Sync Outlook';
 }
 
 async function startSync() {
@@ -407,9 +439,10 @@ Return ONLY a raw JSON object with no markdown, no backticks, no explanation:
 The date field must be the quote issue date from the PDF (or the email date if not found in the PDF). Amount must be a plain number.`;
 
   async function callClaude(messages, useGmail) {
+    const apiKey = getApiKey();
     const headers = {
       'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
     };
     const body = {
@@ -421,8 +454,8 @@ The date field must be the quote issue date from the PDF (or the email date if n
       headers['anthropic-beta'] = 'mcp-client-2025-04-04';
       body.mcp_servers = [{
         type: 'url',
-        url: 'https://gmailmcp.googleapis.com/mcp/v1',
-        name: 'gmail'
+        url: 'https://microsoft365.mcp.claude.com/mcp',
+        name: 'microsoft365'
       }];
     }
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -437,8 +470,14 @@ The date field must be the quote issue date from the PDF (or the email date if n
     return resp.json();
   }
 
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const entered = promptForApiKey();
+    if (!entered) { setSyncing(false); return; }
+  }
+
   try {
-    log('Calling Anthropic API with Gmail MCP…');
+    log('Calling Anthropic API with Microsoft 365 MCP…');
 
     const data = await callClaude([{role:'user', content: prompt}], true);
 
